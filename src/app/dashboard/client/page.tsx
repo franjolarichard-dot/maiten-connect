@@ -29,8 +29,8 @@ export default function ClientDashboard() {
            reqs.push({ id: doc.id, ...doc.data() } as ServiceRequest);
          });
          setRequests(reqs.sort((a, b) => {
-           const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
-           const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+           const timeA = (a.createdAt as any)?.toMillis ? (a.createdAt as any).toMillis() : 0;
+           const timeB = (b.createdAt as any)?.toMillis ? (b.createdAt as any).toMillis() : 0;
            return timeB - timeA;
         }));
       });
