@@ -137,11 +137,11 @@ export async function POST(req: Request) {
     // Siempre incluir el prompt del usuario como keyword
     keywords.add(promptLower);
     // Incluir cada palabra del prompt como keyword individual
-    promptLower.split(/\s+/).forEach(w => { if (w.length > 2) keywords.add(w); });
+    promptLower.split(/\s+/).forEach((w: string) => { if (w.length > 2) keywords.add(w); });
     // Si la IA funcionó, incluir la categoría y palabras del summary
     if (category) keywords.add(category);
     if (summary) {
-      summary.split(/\s+/).forEach(w => { if (w.length > 2) keywords.add(w); });
+      summary.split(/\s+/).forEach((w: string) => { if (w.length > 2) keywords.add(w); });
     }
 
     const matchedProviders = findMatchingProviders(
