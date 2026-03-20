@@ -105,7 +105,7 @@ export async function POST(req: Request) {
           apiKey: process.env.GEMINI_API_KEY,
           baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/"
         });
-        modelName = "gemini-2.0-flash";
+        modelName = "gemini-1.5-flash";
       }
 
       if (isGemini || isOllama || process.env.OPENAI_API_KEY) {
@@ -144,9 +144,32 @@ export async function POST(req: Request) {
       summary.split(/\s+/).forEach((w: string) => { if (w.length > 2) keywords.add(w); });
     }
 
+    // 3.2 Expansión inteligente de Keywords (Fallback para cuando la IA falla)
+    const synonymMap: Record<string, string[]> = {
+      'luz': ['electricista', 'electricidad', 'ampolleta', 'corto'],
+      'electricista': ['luz', 'electricidad', 'tablero'],
+      'agua': ['gasfiter', 'cañeria', 'filtracion', 'llave', 'baño', 'cocina'],
+      'gasfiter': ['agua', 'fuga', 'califont', 'destape', 'pvc'],
+      'pasto': ['jardinero', 'riego', 'poda'],
+      'piscina': ['limpieza', 'cloro', 'bomba'],
+      'flete': ['mudanza', 'transporte', 'carga'],
+      'arquitecto': ['arquitectura', 'diseño', 'plano', 'permiso'],
+      'techo': ['techumbre', 'gotera', 'constructor'],
+      'pintar': ['pintor', 'fachada', 'muro'],
+    };
+
+    const expandedKeywords = new Set<string>(keywords);
+    keywords.forEach((kw: string) => {
+      for (const [key, synonyms] of Object.entries(synonymMap)) {
+        if (kw.includes(key) || key.includes(kw)) {
+          synonyms.forEach((s: string) => expandedKeywords.add(s));
+        }
+      }
+    });
+
     const matchedProviders = findMatchingProviders(
       allDocs,
-      Array.from(keywords),
+      Array.from(expandedKeywords),
       userLat,
       userLng
     );
