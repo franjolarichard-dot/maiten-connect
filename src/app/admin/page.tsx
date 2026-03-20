@@ -1,10 +1,19 @@
 "use client";
 
-import { useState } from "react";
-import { collection, doc, setDoc } from "firebase/firestore";
+import { useState, useEffect } from "react";
+import { collection, doc, setDoc, getDocs, deleteDoc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
-const ADMIN_PASSWORD = "maiten2025"; // Cámbiala por la que quieras
+const ADMIN_PASSWORD = "maiten2025";
+
+interface Provider {
+  id: string;
+  displayName: string;
+  phone: string;
+  servicesOffered: string[];
+  location: { city: string };
+  isAvailable: boolean;
+}
 
 export default function AdminPage() {
   const [authorized, setAuthorized] = useState(false);
@@ -15,7 +24,34 @@ export default function AdminPage() {
   const [city, setCity] = useState("Maitencillo");
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
-  const [providers, setProviders] = useState<string[]>([]);
+  const [allProviders, setAllProviders] = useState<Provider[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editServices, setEditServices] = useState("");
+  const [tab, setTab] = useState<"add" | "list">("list");
+
+  // Cargar todos los proveedores de Firestore
+  const loadProviders = async () => {
+    const snapshot = await getDocs(collection(db, "providers"));
+    const list: Provider[] = [];
+    snapshot.forEach((doc) => {
+      const d = doc.data();
+      list.push({
+        id: doc.id,
+        displayName: d.displayName || "Sin nombre",
+        phone: d.phone || "",
+        servicesOffered: d.servicesOffered || [],
+        location: d.location || { city: "?" },
+        isAvailable: d.isAvailable !== false,
+      });
+    });
+    setAllProviders(list);
+  };
+
+  useEffect(() => {
+    if (authorized) loadProviders();
+  }, [authorized]);
 
   if (!authorized) {
     return (
@@ -61,12 +97,7 @@ export default function AdminPage() {
         email: "ingreso_rapido@admin.com",
         role: "PROVIDER",
         servicesOffered: servicesArray,
-        location: {
-          lat: -32.650,
-          lng: -71.433,
-          address: "Centro",
-          city: city
-        },
+        location: { lat: -32.650, lng: -71.433, address: "Centro", city: city },
         activeRadiusKm: 30,
         rating: 5.0,
         reviewCount: 0,
@@ -74,32 +105,127 @@ export default function AdminPage() {
         createdAt: new Date()
       });
 
-      setProviders(prev => [...prev, `${name} (${servicesArray.join(", ")}) - ${city}`]);
       setMsg(`✅ "${name}" agregado exitosamente`);
       setName("");
       setPhone("");
       setServices("");
+      await loadProviders();
     } catch(err: any) {
       setMsg("❌ Error: " + err.message);
     }
     setLoading(false);
   };
 
+  const handleDelete = async (id: string, provName: string) => {
+    if (!confirm(`¿Eliminar a "${provName}"? Esta acción no se puede deshacer.`)) return;
+    try {
+      await deleteDoc(doc(db, "providers", id));
+      setMsg(`🗑️ "${provName}" eliminado`);
+      await loadProviders();
+    } catch(err: any) {
+      setMsg("❌ Error: " + err.message);
+    }
+  };
+
+  const startEdit = (p: Provider) => {
+    setEditingId(p.id);
+    setEditName(p.displayName);
+    setEditPhone(p.phone);
+    setEditServices(p.servicesOffered.join(", "));
+  };
+
+  const handleUpdate = async () => {
+    if (!editingId) return;
+    try {
+      await updateDoc(doc(db, "providers", editingId), {
+        displayName: editName,
+        phone: editPhone,
+        servicesOffered: editServices.split(",").map(s => s.trim().toLowerCase()),
+      });
+      setEditingId(null);
+      setMsg(`✅ Proveedor actualizado`);
+      await loadProviders();
+    } catch(err: any) {
+      setMsg("❌ Error: " + err.message);
+    }
+  };
+
   return (
-    <main className="flex-grow p-6 sm:p-12 pt-28 max-w-4xl mx-auto w-full min-h-screen">
+    <main className="flex-grow p-6 sm:p-12 pt-28 max-w-5xl mx-auto w-full min-h-screen">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-extrabold text-foreground">Ingreso Rápido de Proveedores</h1>
-          <p className="text-slate-500 mt-1">Carga inicial de especialistas en la plataforma</p>
+          <h1 className="text-3xl font-extrabold text-foreground">Panel de Administración</h1>
+          <p className="text-slate-500 mt-1">Gestiona los especialistas de la plataforma</p>
         </div>
         <span className="px-3 py-1 bg-slate-100 dark:bg-slate-800 text-slate-500 text-xs font-bold rounded-full">ADMIN</span>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Form */}
-        <div className="md:col-span-2 glass-card p-8">
-          {msg && <div className={`mb-6 p-4 rounded-lg font-medium text-sm ${msg.startsWith("✅") ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300" : "bg-red-100 dark:bg-red-900/30 text-red-700"}`}>{msg}</div>}
+      {/* Tabs */}
+      <div className="flex gap-2 mb-6">
+        <button onClick={() => setTab("list")} className={`px-5 py-2 rounded-xl font-bold text-sm transition-all cursor-pointer ${tab === "list" ? "bg-primary text-white shadow-lg shadow-primary/30" : "bg-slate-100 dark:bg-slate-800 text-slate-500"}`}>
+          📋 Proveedores ({allProviders.length})
+        </button>
+        <button onClick={() => setTab("add")} className={`px-5 py-2 rounded-xl font-bold text-sm transition-all cursor-pointer ${tab === "add" ? "bg-primary text-white shadow-lg shadow-primary/30" : "bg-slate-100 dark:bg-slate-800 text-slate-500"}`}>
+          ➕ Agregar Nuevo
+        </button>
+      </div>
 
+      {msg && <div className={`mb-6 p-4 rounded-lg font-medium text-sm ${msg.startsWith("✅") || msg.startsWith("🗑") ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300" : "bg-red-100 dark:bg-red-900/30 text-red-700"}`}>{msg}</div>}
+
+      {/* TAB: Lista de Proveedores */}
+      {tab === "list" && (
+        <div className="glass-card p-6">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-xl font-semibold text-foreground">Todos los Proveedores</h2>
+            <button onClick={loadProviders} className="text-xs bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-lg text-slate-500 hover:text-slate-700 cursor-pointer">🔄 Refrescar</button>
+          </div>
+
+          {allProviders.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-slate-500">No hay proveedores registrados. Agrega el primero.</p>
+              <button onClick={() => setTab("add")} className="mt-4 bg-primary text-white px-6 py-2 rounded-lg font-bold cursor-pointer">Agregar Proveedor</button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {allProviders.map(p => (
+                <div key={p.id} className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center gap-3">
+                  {editingId === p.id ? (
+                    /* Modo edición */
+                    <div className="flex-1 space-y-2">
+                      <input value={editName} onChange={e => setEditName(e.target.value)} className="w-full p-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-sm outline-none" placeholder="Nombre" />
+                      <input value={editPhone} onChange={e => setEditPhone(e.target.value)} className="w-full p-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-sm outline-none" placeholder="Teléfono" />
+                      <input value={editServices} onChange={e => setEditServices(e.target.value)} className="w-full p-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-sm outline-none" placeholder="Servicios (separados por coma)" />
+                      <div className="flex gap-2">
+                        <button onClick={handleUpdate} className="bg-emerald-500 text-white px-4 py-1.5 rounded-lg text-xs font-bold cursor-pointer">💾 Guardar</button>
+                        <button onClick={() => setEditingId(null)} className="bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-4 py-1.5 rounded-lg text-xs font-bold cursor-pointer">Cancelar</button>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Modo visualización */
+                    <>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-foreground truncate">{p.displayName}</p>
+                        <p className="text-xs text-slate-500 mt-1">
+                          {p.servicesOffered.join(", ")} • {p.location?.city || "?"} {p.phone && `• ${p.phone}`}
+                        </p>
+                      </div>
+                      <div className="flex gap-2 shrink-0">
+                        <button onClick={() => startEdit(p)} className="bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer hover:bg-blue-200">✏️ Editar</button>
+                        <button onClick={() => handleDelete(p.id, p.displayName)} className="bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer hover:bg-red-200">🗑️ Eliminar</button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB: Agregar Nuevo */}
+      {tab === "add" && (
+        <div className="glass-card p-8 max-w-2xl">
+          <h2 className="text-xl font-semibold text-foreground mb-6">Ingreso Rápido de Proveedor</h2>
           <form onSubmit={handleAdd} className="flex flex-col gap-5">
             <div>
               <label className="block text-sm font-bold mb-2 text-slate-700 dark:text-slate-300">Nombre Completo o Empresa *</label>
@@ -134,24 +260,7 @@ export default function AdminPage() {
             </button>
           </form>
         </div>
-
-        {/* Sidebar: Recently added */}
-        <div className="glass-card p-6 h-fit">
-          <h3 className="text-lg font-semibold mb-4 text-foreground">Agregados esta sesión</h3>
-          {providers.length === 0 ? (
-            <p className="text-slate-500 text-sm">Aún no has agregado proveedores.</p>
-          ) : (
-            <ul className="space-y-3">
-              {providers.map((p, i) => (
-                <li key={i} className="text-sm bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 flex items-start gap-2">
-                  <svg className="w-4 h-4 text-primary mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
-                  <span className="text-slate-700 dark:text-slate-300">{p}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </div>
+      )}
     </main>
   );
 }

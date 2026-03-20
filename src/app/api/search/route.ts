@@ -93,9 +93,14 @@ export async function POST(req: Request) {
     
     querySnapshot.forEach((doc) => {
       const data = doc.data() as ProviderProfile;
-      // Normalizar comprobación
-      if (data.servicesOffered && data.servicesOffered.map(s => s.toLowerCase()).includes(category)) {
-        
+      // Matching FLEXIBLE: la categoría de la IA o el servicio del proveedor
+      // pueden coincidir parcialmente (ej: "arquitecto" matchea con "arquitectura")
+      const services = data.servicesOffered?.map(s => s.toLowerCase()) || [];
+      const isMatch = services.some(service => 
+        service.includes(category) || category.includes(service)
+      );
+      
+      if (isMatch) {
         // Si el cliente nos envió su ubicación, filtramos por < 30km
         if (userLat && userLng && data.location?.lat && data.location?.lng) {
           const dist = getDistanceFromLatLonInKm(userLat, userLng, data.location.lat, data.location.lng);
