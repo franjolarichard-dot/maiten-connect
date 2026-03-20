@@ -12,6 +12,8 @@ interface AuthContextType {
   profile: UserProfile | null;
   loading: boolean;
   signInWithGoogle: (role: UserRole) => Promise<void>;
+  signInWithEmail: (email: string, pass: string) => Promise<void>;
+  signUpWithEmail: (email: string, pass: string, name: string, role: UserRole, phone: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -20,6 +22,8 @@ const AuthContext = createContext<AuthContextType>({
   profile: null,
   loading: true,
   signInWithGoogle: async () => {},
+  signInWithEmail: async () => {},
+  signUpWithEmail: async () => {},
   logout: async () => {},
 });
 
@@ -45,16 +49,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           if (docSnap.exists()) {
              setProfile(docSnap.data() as UserProfile);
           } else {
-            // Usuario nuevo sin perfil de db (Raro, pero manejamos el edge case)
-            const newProfile: UserProfile = {
-              uid: currentUser.uid,
-              email: currentUser.email || "",
-              displayName: currentUser.displayName || "",
-              role: "CLIENT", 
-              createdAt: new Date(),
-            };
-            await setDoc(doc(db, "users", currentUser.uid), newProfile);
-            setProfile(newProfile);
+             setProfile(null);
           }
         }
       } else {
@@ -70,35 +65,59 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const provider = new GoogleAuthProvider();
     try {
       const result = await signInWithPopup(auth, provider);
-      
-      // Si es proveedor, va a la coleccion providers. Si es client, users.
-      const collectionName = role === "PROVIDER" ? "providers" : "users";
-      const docRef = doc(db, collectionName, result.user.uid);
-      const docSnap = await getDoc(docRef);
-      
-      if (!docSnap.exists()) {
-        const newProfile: any = {
-          uid: result.user.uid,
-          email: result.user.email || "",
-          displayName: result.user.displayName || "",
-          role,
-          createdAt: new Date(),
-        };
-        
-        if(role === "PROVIDER") {
-            newProfile.servicesOffered = [];
-            newProfile.location = { lat: 0, lng: 0, address: "Pendiente", city: "Pendiente" };
-            newProfile.activeRadiusKm = 30;
-            newProfile.rating = 0;
-            newProfile.reviewCount = 0;
-            newProfile.isAvailable = true;
-        }
-
-        await setDoc(docRef, newProfile);
-        setProfile(newProfile);
-      }
+      await ensureProfileExists(result.user.uid, result.user.email || "", result.user.displayName || "", role, "");
     } catch (error) {
       console.error("Error signing in with Google:", error);
+      throw error;
+    }
+  };
+
+  const signInWithEmail = async (email: string, pass: string) => {
+    try {
+      await signInWithEmailAndPassword(auth, email, pass);
+    } catch (error) {
+      console.error("Error signing in with Email:", error);
+      throw error;
+    }
+  };
+
+  const signUpWithEmail = async (email: string, pass: string, name: string, role: UserRole, phone: string) => {
+    try {
+      const result = await createUserWithEmailAndPassword(auth, email, pass);
+      await updateProfile(result.user, { displayName: name });
+      await ensureProfileExists(result.user.uid, email, name, role, phone);
+    } catch (error) {
+      console.error("Error signing up with Email:", error);
+      throw error;
+    }
+  };
+
+  const ensureProfileExists = async (uid: string, email: string, name: string, role: UserRole, phone: string) => {
+    const collectionName = role === "PROVIDER" ? "providers" : "users";
+    const docRef = doc(db, collectionName, uid);
+    const docSnap = await getDoc(docRef);
+    
+    if (!docSnap.exists()) {
+      const newProfile: any = {
+        uid,
+        email,
+        displayName: name,
+        role,
+        phone,
+        createdAt: new Date(),
+      };
+      
+      if(role === "PROVIDER") {
+          newProfile.servicesOffered = [];
+          newProfile.location = { lat: -32.65, lng: -71.43, address: "Maitencillo", city: "Maitencillo" };
+          newProfile.activeRadiusKm = 30;
+          newProfile.rating = 0;
+          newProfile.reviewCount = 0;
+          newProfile.isAvailable = true;
+      }
+
+      await setDoc(docRef, newProfile);
+      setProfile(newProfile);
     }
   };
 
@@ -107,7 +126,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signInWithGoogle, logout }}>
+    <AuthContext.Provider value={{ user, profile, loading, signInWithGoogle, signInWithEmail, signUpWithEmail, logout }}>
       {children}
     </AuthContext.Provider>
   );

@@ -16,7 +16,7 @@ export default function Home() {
   const [error, setError] = useState("");
   const [stats, setStats] = useState({ providers: 0, cities: 4 });
   
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const router = useRouter();
   const [requestStatus, setRequestStatus] = useState<Record<string, string>>({});
 
@@ -45,6 +45,8 @@ export default function Home() {
     try {
        await createServiceRequest({
          clientId: user.uid,
+         clientName: user.displayName || "Cliente",
+         clientPhone: (user as any).phone || (profile as any)?.phone || "",
          providerId: provider.uid,
          serviceCategory: results?.intent?.category || "general",
          description: prompt

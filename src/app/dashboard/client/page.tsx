@@ -22,17 +22,21 @@ export default function ClientDashboard() {
 
   useEffect(() => {
     if (user?.uid) {
+      console.log("Cargando solicitudes para cliente:", user.uid);
       const q = query(collection(db, "requests"), where("clientId", "==", user.uid));
       const unsubscribe = onSnapshot(q, (snapshot) => {
          const reqs: ServiceRequest[] = [];
          snapshot.forEach((doc) => {
            reqs.push({ id: doc.id, ...doc.data() } as ServiceRequest);
          });
+         console.log("Solicitudes actualizadas:", reqs.map(r => ({ id: r.id, status: r.status })));
          setRequests(reqs.sort((a, b) => {
            const timeA = (a.createdAt as any)?.toMillis ? (a.createdAt as any).toMillis() : 0;
            const timeB = (b.createdAt as any)?.toMillis ? (b.createdAt as any).toMillis() : 0;
            return timeB - timeA;
-        }));
+         }));
+      }, (error) => {
+        console.error("Error en onSnapshot de solicitudes:", error);
       });
       return () => unsubscribe();
     }
@@ -74,8 +78,14 @@ export default function ClientDashboard() {
                  
                  {req.status === "ACCEPTED" ? (
                    <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700 space-y-3">
-                     <p className="text-sm text-slate-600 dark:text-slate-300 block">El especialista aceptó tu trabajo.</p>
-                     <a href="https://wa.me/56912345678" target="_blank" rel="noreferrer" className="w-full flex items-center justify-center gap-2 bg-[#25D366] text-white py-2 rounded-lg font-bold hover:bg-[#1DA851] transition-colors">
+                     <p className="text-sm text-slate-600 dark:text-slate-300 block">
+                       <strong>{req.providerName || "El especialista"}</strong> aceptó tu trabajo.
+                     </p>
+                     <a 
+                       href={`https://wa.me/${req.providerPhone}?text=${encodeURIComponent(`Hola ${req.providerName}, soy ${profile?.displayName} de MaitenConnect. Vimos que aceptaste mi solicitud de ${req.serviceCategory}.`)}`}
+                       target="_blank" rel="noreferrer" 
+                       className="w-full flex items-center justify-center gap-2 bg-[#25D366] text-white py-2.5 rounded-lg font-bold hover:bg-[#1DA851] transition-colors shadow-sm"
+                     >
                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.298.045-.677.086-1.921-.432-1.498-.622-2.527-2.146-2.603-2.247-.076-.102-.622-.827-.622-1.579 0-.751.391-1.12.529-1.267.138-.146.299-.183.399-.183.1 0 .199.004.288.008.106.005.233-.038.358.261.128.307.436 1.066.474 1.144.038.077.064.167.013.267-.051.101-.077.164-.153.255-.078.093-.163.203-.23.28-.076.088-.155.185-.065.34.09.155.4 0 .66.903.26.241.517.382.684.484.167.102.261.085.358.053.053-.016.153-.082.34-.34.364-.492.368-.903.255-.1.085-.367-.123-.55-.268z"></path></svg>
                        Contactar Experto
                      </a>

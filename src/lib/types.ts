@@ -28,8 +28,12 @@ export type RequestStatus = 'PENDING' | 'ACCEPTED' | 'COMPLETED' | 'REJECTED' | 
 export interface ServiceRequest {
   id?: string;
   clientId: string;
+  clientName?: string;
+  clientPhone?: string;
   providerId: string;
-  serviceCategory: string; // Interpreted by AI
+  providerName?: string;
+  providerPhone?: string;
+  serviceCategory: string; // Interpreted by IA
   description: string; // The natural language prompt from the user
   status: RequestStatus;
   createdAt: Date;

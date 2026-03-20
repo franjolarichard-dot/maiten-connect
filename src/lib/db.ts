@@ -22,15 +22,29 @@ export const createServiceRequest = async (request: Omit<ServiceRequest, 'id' | 
 };
 
 // Hybrid tracking logic: Provider accepts the job and records the data
-export const acceptServiceRequest = async (requestId: string, providerId: string, estimatedTime: string, estimatedPrice?: number) => {
+export const acceptServiceRequest = async (
+  requestId: string, 
+  providerId: string, 
+  providerName: string,
+  providerPhone: string,
+  estimatedTime: string, 
+  estimatedPrice?: number
+) => {
   const reqRef = doc(db, 'requests', requestId);
   await updateDoc(reqRef, {
     status: 'ACCEPTED',
     providerId: providerId,
+    providerName: providerName,
+    providerPhone: providerPhone,
     estimatedTime,
     estimatedPrice,
     updatedAt: new Date()
   });
   // After this resolves, the platform guarantees a registered "MATCH" 
   // and the UI can reveal the "Coordinar por WhatsApp" floating button.
+};
+
+export const updateProviderProfile = async (uid: string, profile: Partial<ProviderProfile>) => {
+  const providerRef = doc(db, 'providers', uid);
+  await updateDoc(providerRef, { ...profile });
 };

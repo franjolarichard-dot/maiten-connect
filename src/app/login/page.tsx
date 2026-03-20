@@ -1,13 +1,18 @@
-"use client";
+"use client"; // Force rebuild v2
 
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 
 export default function LoginPage() {
-  const { user, profile, loading, signInWithGoogle } = useAuth();
+  const { user, profile, loading, signInWithGoogle, signInWithEmail } = useAuth();
   const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [authMode, setAuthMode] = useState<"GOOGLE" | "EMAIL">("GOOGLE");
+  const [error, setError] = useState("");
+  const [loggingIn, setLoggingIn] = useState(false);
 
   useEffect(() => {
     if (user && profile && !loading) {
@@ -19,8 +24,32 @@ export default function LoginPage() {
     }
   }, [user, profile, loading, router]);
 
-  const handleLogin = async (role: "CLIENT" | "PROVIDER") => {
-    await signInWithGoogle(role);
+  const handleGoogleLogin = async (role: "CLIENT" | "PROVIDER") => {
+    try {
+      await signInWithGoogle(role);
+    } catch (err: any) {
+      setError(err.message || "Error al ingresar con Google");
+    }
+  };
+
+  const handleEmailLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setLoggingIn(true);
+    try {
+      await signInWithEmail(email, password);
+    } catch (err: any) {
+      console.error("Login email error:", err);
+      if (err.code === "auth/operation-not-allowed") {
+        setError("El ingreso por email no está habilitado en Firebase. Por favor actívalo en la consola.");
+      } else if (err.code === "auth/user-not-found" || err.code === "auth/wrong-password" || err.code === "auth/invalid-credential") {
+        setError("Credenciales inválidas. Verifica tu correo y contraseña.");
+      } else {
+        setError(`Error al ingresar: ${err.message}`);
+      }
+    } finally {
+      setLoggingIn(false);
+    }
   };
 
   return (
@@ -36,25 +65,83 @@ export default function LoginPage() {
         </div>
         
         <h2 className="text-3xl font-bold text-foreground mb-2 text-center">Bienvenido</h2>
-        <p className="text-slate-500 text-center mb-8">Elige cómo quieres ingresar a MaitenConnect</p>
+        <p className="text-slate-500 text-center mb-8">
+          {authMode === "GOOGLE" ? "Elige cómo quieres ingresar" : "Ingresa con tu correo"}
+        </p>
 
-        <div className="w-full flex flex-col gap-4">
-          <button 
-            onClick={() => handleLogin("CLIENT")}
-            className="w-full flex items-center justify-center gap-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary text-foreground font-semibold py-3 px-4 rounded-xl transition-all shadow-sm hover:shadow-md"
-          >
-            <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" className="w-5 h-5" />
-            Ingresar como Cliente
-          </button>
+        {error && <p className="w-full bg-red-50 dark:bg-red-900/20 text-red-500 p-3 rounded-lg text-sm mb-4 text-center font-medium">{error}</p>}
 
-          <button 
-            onClick={() => handleLogin("PROVIDER")}
-            className="w-full flex items-center justify-center gap-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-secondary text-foreground font-semibold py-3 px-4 rounded-xl transition-all shadow-sm hover:shadow-md"
-          >
-            <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" className="w-5 h-5" />
-            Ingresar como Especialista
-          </button>
-        </div>
+        {authMode === "GOOGLE" ? (
+          <div className="w-full flex flex-col gap-4">
+            <button 
+              onClick={() => handleGoogleLogin("CLIENT")}
+              className="w-full flex items-center justify-center gap-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary text-foreground font-semibold py-3 px-4 rounded-xl transition-all shadow-sm hover:shadow-md"
+            >
+              <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" className="w-5 h-5" />
+              Ingresar como Cliente
+            </button>
+
+            <button 
+              onClick={() => handleGoogleLogin("PROVIDER")}
+              className="w-full flex items-center justify-center gap-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-secondary text-foreground font-semibold py-3 px-4 rounded-xl transition-all shadow-sm hover:shadow-md"
+            >
+              <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" className="w-5 h-5" />
+              Ingresar como Especialista
+            </button>
+
+            <button 
+              onClick={() => setAuthMode("EMAIL")}
+              className="mt-2 text-primary font-medium text-sm hover:underline"
+            >
+              Prefiero usar mi correo electrónico
+            </button>
+          </div>
+        ) : (
+          <form onSubmit={handleEmailLogin} className="w-full flex flex-col gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">Email</label>
+              <input 
+                type="email" 
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full bg-slate-100 dark:bg-slate-800 border-none rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-primary/50 transition-all"
+                placeholder="tu@email.com"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">Contraseña</label>
+              <input 
+                type="password" 
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full bg-slate-100 dark:bg-slate-800 border-none rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-primary/50 transition-all"
+                placeholder="••••••••"
+                required
+              />
+            </div>
+            <button 
+              type="submit"
+              disabled={loggingIn}
+              className="w-full bg-primary hover:bg-primary-dark text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-primary/30 mt-2 disabled:bg-slate-400"
+            >
+              {loggingIn ? "Ingresando..." : "Entrar"}
+            </button>
+            
+            <div className="flex flex-col items-center gap-3 mt-4">
+              <button 
+                type="button"
+                onClick={() => setAuthMode("GOOGLE")}
+                className="text-slate-500 text-sm hover:text-primary transition-colors"
+              >
+                Volver a ingreso con Google
+              </button>
+              <p className="text-slate-500 text-sm">
+                ¿No tienes cuenta? <Link href="/signup" className="text-primary font-bold hover:underline">Regístrate aquí</Link>
+              </p>
+            </div>
+          </form>
+        )}
 
         <Link href="/" className="mt-8 text-sm text-slate-500 hover:text-primary transition-colors">
           Volver al inicio
