@@ -40,46 +40,37 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Prompt is required' }, { status: 400 });
     }
 
-    if(!isOllama && !isGemini && !process.env.OPENAI_API_KEY) {
-         console.warn("ADVERTENCIA: Inteligencia artificial no configurada. Usando Match simulado.");
-         return NextResponse.json({
-            intent: { category: "gasfiter", summary: "Fuga de gas detectada" },
-            providers: []
-         });
+    // Configurar cliente según el proveedor elegido
+    let aiClient = openai;
+    let modelName = isOllama ? (process.env.OLLAMA_MODEL || "llama3.2") : "gpt-4o-mini";
+
+    if (isGemini && process.env.GEMINI_API_KEY) {
+      aiClient = new OpenAI({
+        apiKey: process.env.GEMINI_API_KEY,
+        baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/"
+      });
+      modelName = "gemini-1.5-flash"; // Nombre estable en el endpoint OpenAI-compatible
+    } else if (!isOllama && !process.env.OPENAI_API_KEY) {
+       // Fallback a simulación si nada está configurado
+       return NextResponse.json({
+          intent: { category: "gasfiter", summary: "Fuga de gas detectada" },
+          providers: []
+       });
     }
 
-    // 1. Interpretar lenguaje natural con IA
-    let parsedIntent: any = {};
-    const systemPrompt = "Eres el asistente inteligente de MaitenConnect, una plataforma de servicios en Chile (Zapallar, Maitencillo, etc). Clasifica el problema del usuario de manera estricta. Devuelve un JSON válido con la propiedad 'category' (una sola palabra clave en minúscula como: gasfiter, piscinas, limpieza, electricista, flete) y la propiedad 'summary' (un resumen muy corto del problema).";
+    // 1. Interpretar lenguaje natural con IA (Universal via OpenAI SDK)
+    const systemPrompt = "Eres el asistente inteligente de MaitenConnect, una plataforma de servicios en Chile. Clasifica el problema del usuario. Devuelve un JSON con: 'category' (una sola palabra clave en minúscula: gasfiter, piscinas, limpieza, electricista, fletes, etc) y 'summary' (resumen corto).";
+    
+    const completion = await aiClient.chat.completions.create({
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: prompt }
+      ],
+      model: modelName,
+      response_format: { type: "json_object" }
+    });
 
-    if (isGemini) {
-      if (!process.env.GEMINI_API_KEY) throw new Error("GEMINI_API_KEY is missing");
-      const gRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-           system_instruction: { parts: { text: systemPrompt } },
-           contents: [{ parts: [{ text: prompt }] }],
-           generationConfig: { responseMimeType: "application/json" }
-        })
-      });
-      const data = await gRes.json();
-      if (!gRes.ok) throw new Error(data.error?.message || "Gemini fetch failed");
-      
-      const txt = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
-      parsedIntent = JSON.parse(txt);
-
-    } else {
-      const completion = await openai.chat.completions.create({
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: prompt }
-        ],
-        model: isOllama ? (process.env.OLLAMA_MODEL || "llama3.2") : "gpt-4o-mini",
-        response_format: { type: "json_object" }
-      });
-      parsedIntent = JSON.parse(completion.choices[0].message.content || "{}");
-    }
+    const parsedIntent = JSON.parse(completion.choices[0].message.content || "{}");
 
     const category = parsedIntent.category?.toLowerCase() || '';
     const summary = parsedIntent.summary?.toLowerCase() || '';
