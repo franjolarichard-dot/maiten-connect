@@ -78,16 +78,27 @@ export async function POST(req: Request) {
 
     // 2. Buscar en Firestore a los proveedores correspondientes
     const providersRef = collection(db, 'providers');
-    // Consultamos todos y filtramos en memoria para evitar problemas con campos faltantes (como isAvailable)
     const querySnapshot = await getDocs(providersRef);
     
     let matchedProviders: any[] = [];
+    let debugAllProviders: any[] = []; // DEBUG: ver todos los proveedores
     
-    querySnapshot.forEach((doc) => {
-      const data = doc.data() as ProviderProfile;
+    querySnapshot.forEach((docSnap) => {
+      const data = docSnap.data() as ProviderProfile;
+      
+      const debugEntry: any = {
+        id: docSnap.id,
+        name: data.displayName,
+        services: data.servicesOffered,
+        isAvailable: data.isAvailable,
+      };
       
       // Filtro de disponibilidad (si no existe el campo, asumimos true por defecto)
-      if (data.isAvailable === false) return;
+      if (data.isAvailable === false) {
+        debugEntry.excluded = 'isAvailable=false';
+        debugAllProviders.push(debugEntry);
+        return;
+      }
 
       const services = data.servicesOffered?.map(s => s.toLowerCase()) || [];
       
@@ -96,8 +107,14 @@ export async function POST(req: Request) {
       const isSummaryMatch = summary && services.some(s => summary.includes(s) || s.includes(summary));
       const isPromptKeywordMatch = services.some(s => promptLower.includes(s) || s.includes(promptLower));
 
+      debugEntry.servicesLower = services;
+      debugEntry.matchCategory = isCategoryMatch;
+      debugEntry.matchSummary = isSummaryMatch;
+      debugEntry.matchPrompt = isPromptKeywordMatch;
+      debugEntry.matched = isCategoryMatch || isSummaryMatch || isPromptKeywordMatch;
+      debugAllProviders.push(debugEntry);
+
       if (isCategoryMatch || isSummaryMatch || isPromptKeywordMatch) {
-        // Si el cliente nos envió su ubicación, filtramos por < 30km
         if (userLat && userLng && data.location?.lat && data.location?.lng) {
           const dist = getDistanceFromLatLonInKm(userLat, userLng, data.location.lat, data.location.lng);
           if (dist <= (data.activeRadiusKm || 30)) {
@@ -112,6 +129,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       intent: parsedIntent,
       providers: matchedProviders,
+      debug: { category, summary, promptLower, totalProviders: querySnapshot.size, allProviders: debugAllProviders },
     });
 
   } catch (error: any) {
