@@ -87,14 +87,17 @@ export async function POST(req: Request) {
 
     // 2. Buscar en Firestore a los proveedores correspondientes
     const providersRef = collection(db, 'providers');
-    const q = query(providersRef, where('isAvailable', '==', true));
-    
-    const querySnapshot = await getDocs(q);
+    // Consultamos todos y filtramos en memoria para evitar problemas con campos faltantes (como isAvailable)
+    const querySnapshot = await getDocs(providersRef);
     
     let matchedProviders: any[] = [];
     
     querySnapshot.forEach((doc) => {
       const data = doc.data() as ProviderProfile;
+      
+      // Filtro de disponibilidad (si no existe el campo, asumimos true por defecto)
+      if (data.isAvailable === false) return;
+
       const services = data.servicesOffered?.map(s => s.toLowerCase()) || [];
       
       // Lógica de Matching Multicapa
