@@ -82,6 +82,8 @@ export async function POST(req: Request) {
     }
 
     const category = parsedIntent.category?.toLowerCase() || '';
+    const summary = parsedIntent.summary?.toLowerCase() || '';
+    const promptLower = prompt.toLowerCase();
 
     // 2. Buscar en Firestore a los proveedores correspondientes
     const providersRef = collection(db, 'providers');
@@ -93,14 +95,14 @@ export async function POST(req: Request) {
     
     querySnapshot.forEach((doc) => {
       const data = doc.data() as ProviderProfile;
-      // Matching FLEXIBLE: la categoría de la IA o el servicio del proveedor
-      // pueden coincidir parcialmente (ej: "arquitecto" matchea con "arquitectura")
       const services = data.servicesOffered?.map(s => s.toLowerCase()) || [];
-      const isMatch = services.some(service => 
-        service.includes(category) || category.includes(service)
-      );
       
-      if (isMatch) {
+      // Lógica de Matching Multicapa
+      const isCategoryMatch = category && services.some(s => s.includes(category) || category.includes(s));
+      const isSummaryMatch = summary && services.some(s => summary.includes(s) || s.includes(summary));
+      const isPromptKeywordMatch = services.some(s => promptLower.includes(s) || s.includes(promptLower));
+
+      if (isCategoryMatch || isSummaryMatch || isPromptKeywordMatch) {
         // Si el cliente nos envió su ubicación, filtramos por < 30km
         if (userLat && userLng && data.location?.lat && data.location?.lng) {
           const dist = getDistanceFromLatLonInKm(userLat, userLng, data.location.lat, data.location.lng);
@@ -108,7 +110,6 @@ export async function POST(req: Request) {
              matchedProviders.push({...data, distanceKm: dist.toFixed(1)});
           }
         } else {
-           // Si no hay coords, devolver todos los de la categoría
            matchedProviders.push(data);
         }
       }
