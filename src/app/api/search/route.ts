@@ -4,6 +4,13 @@ import { db } from '@/lib/firebase';
 import { collection, getDocs } from 'firebase/firestore';
 import { ProviderProfile } from '@/lib/types';
 
+const API_VERSION = "v4-bulletproof";
+
+// Health check para verificar qué versión corre en Vercel
+export async function GET() {
+  return NextResponse.json({ version: API_VERSION, timestamp: new Date().toISOString() });
+}
+
 // Soportar local (Ollama) o veloz nube (Gemini vía OpenAI-compatible endpoint)
 const isOllama = process.env.USE_OLLAMA === "true";
 const isGemini = process.env.USE_GEMINI === "true";
