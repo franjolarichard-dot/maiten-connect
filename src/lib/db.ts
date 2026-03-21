@@ -31,15 +31,20 @@ export const acceptServiceRequest = async (
   estimatedPrice?: number
 ) => {
   const reqRef = doc(db, 'requests', requestId);
-  await updateDoc(reqRef, {
+  const updateData: any = {
     status: 'ACCEPTED',
     providerId: providerId,
     providerName: providerName,
     providerPhone: providerPhone,
     estimatedTime,
-    estimatedPrice,
     updatedAt: new Date()
-  });
+  };
+  
+  if (estimatedPrice !== undefined) {
+    updateData.estimatedPrice = estimatedPrice;
+  }
+
+  await updateDoc(reqRef, updateData);
   // After this resolves, the platform guarantees a registered "MATCH" 
   // and the UI can reveal the "Coordinar por WhatsApp" floating button.
 };
