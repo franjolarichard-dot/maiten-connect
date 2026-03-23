@@ -4,12 +4,19 @@ import * as admin from 'firebase-admin';
 // Inicializar Firebase Admin (Singleton)
 if (!admin.apps.length) {
   try {
-    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || '{}');
-    if (serviceAccount.project_id) {
-      admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount),
-      });
-      console.log("Firebase Admin inicializado correctamente");
+    const envVar = process.env.FIREBASE_SERVICE_ACCOUNT;
+    if (!envVar) {
+      console.error("FIREBASE_SERVICE_ACCOUNT no encontrada en process.env");
+    } else {
+      const serviceAccount = JSON.parse(envVar);
+      if (serviceAccount.project_id) {
+        admin.initializeApp({
+          credential: admin.credential.cert(serviceAccount),
+        });
+        console.log("Firebase Admin inicializado correctamente");
+      } else {
+        console.error("El JSON de FIREBASE_SERVICE_ACCOUNT no tiene project_id");
+      }
     }
   } catch (error) {
     console.error("Error al inicializar Firebase Admin:", error);
@@ -20,8 +27,12 @@ export async function POST(request: Request) {
   try {
     // Verificar si Admin SDK está listo
     if (!admin.apps.length) {
+      let debugMsg = "Firebase Admin no configurado.";
+      if (!process.env.FIREBASE_SERVICE_ACCOUNT) debugMsg += " La variable de entorno está VACÍA.";
+      else debugMsg += " El JSON parece ser inválido o incompleto.";
+
       return NextResponse.json(
-        { error: "Firebase Admin no configurado. Verifica la variable FIREBASE_SERVICE_ACCOUNT." },
+        { error: debugMsg },
         { status: 500 }
       );
     }
