@@ -29,7 +29,16 @@ export default function AdminPage() {
   const [editName, setEditName] = useState("");
   const [editPhone, setEditPhone] = useState("");
   const [editServices, setEditServices] = useState("");
-  const [tab, setTab] = useState<"add" | "list">("list");
+  const [tab, setTab] = useState<"add" | "list" | "bulk">("list");
+  const [bulkFile, setBulkFile] = useState<File | null>(null);
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const [bulkResults, setBulkResults] = useState<{ success: number, errors: string[] } | null>(null);
+
+  // Dynamic import for PapaParse to avoid SSR issues if necessary
+  const [Papa, setPapa] = useState<any>(null);
+  useEffect(() => {
+    import("papaparse").then(module => setPapa(module.default));
+  }, []);
 
   // Cargar todos los proveedores de Firestore
   const loadProviders = async () => {
@@ -150,6 +159,42 @@ export default function AdminPage() {
     }
   };
 
+  const handleBulkUpload = () => {
+    if (!bulkFile || !Papa) return;
+    setBulkLoading(true);
+    setBulkResults(null);
+    setMsg("");
+
+    Papa.parse(bulkFile, {
+      header: true,
+      skipEmptyLines: true,
+      complete: async (results: any) => {
+        try {
+          const response = await fetch("/api/admin/bulk-import", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ providers: results.data }),
+          });
+          
+          const resData = await response.json();
+          if (!response.ok) throw new Error(resData.error || "Error en el servidor");
+          
+          setBulkResults(resData);
+          setMsg(`✅ Carga finalizada: ${resData.success} exitosos`);
+          await loadProviders();
+        } catch (err: any) {
+          setMsg("❌ Error masivo: " + err.message);
+        } finally {
+          setBulkLoading(false);
+        }
+      },
+      error: (err: any) => {
+        setMsg("❌ Error leyendo CSV: " + err.message);
+        setBulkLoading(false);
+      }
+    });
+  };
+
   return (
     <main className="flex-grow p-6 sm:p-12 pt-28 max-w-5xl mx-auto w-full min-h-screen">
       <div className="flex items-center justify-between mb-8">
@@ -167,6 +212,9 @@ export default function AdminPage() {
         </button>
         <button onClick={() => setTab("add")} className={`px-5 py-2 rounded-xl font-bold text-sm transition-all cursor-pointer ${tab === "add" ? "bg-primary text-white shadow-lg shadow-primary/30" : "bg-slate-100 dark:bg-slate-800 text-slate-500"}`}>
           ➕ Agregar Nuevo
+        </button>
+        <button onClick={() => setTab("bulk")} className={`px-5 py-2 rounded-xl font-bold text-sm transition-all cursor-pointer ${tab === "bulk" ? "bg-primary text-white shadow-lg shadow-primary/30" : "bg-slate-100 dark:bg-slate-800 text-slate-500"}`}>
+          🚀 Carga Masiva (CSV)
         </button>
       </div>
 
@@ -259,6 +307,66 @@ export default function AdminPage() {
               {loading ? "Guardando..." : "Agregar Proveedor"}
             </button>
           </form>
+        </div>
+      )}
+
+      {/* TAB: Carga Masiva */}
+      {tab === "bulk" && (
+        <div className="glass-card p-8 max-w-2xl">
+          <h2 className="text-xl font-semibold text-foreground mb-4">Carga Masiva de Proveedores</h2>
+          <p className="text-sm text-slate-500 mb-6">Sube un archivo CSV con las columnas correspondientes. Los proveedores recibirán la clave provisoria: <code className="bg-slate-100 px-2 py-0.5 rounded font-bold">Maiten2025!</code></p>
+          
+          <div className="flex flex-col gap-6">
+            <div className="border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-2xl p-10 text-center flex flex-col items-center gap-4 bg-slate-50/50 dark:bg-slate-900/50">
+              <svg className="w-12 h-12 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+              <div className="flex flex-col gap-1">
+                <p className="font-semibold text-foreground">{bulkFile ? bulkFile.name : "Selecciona un archivo CSV"}</p>
+                <p className="text-xs text-slate-500">Formato: nombre, email, telefono, servicios, ciudad</p>
+              </div>
+              <input 
+                type="file" 
+                accept=".csv" 
+                onChange={(e) => setBulkFile(e.target.files?.[0] || null)}
+                className="hidden" 
+                id="csv-upload" 
+              />
+              <label htmlFor="csv-upload" className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-6 py-2 rounded-xl text-sm font-bold cursor-pointer hover:bg-slate-50 transition-colors shadow-sm">
+                Buscar Archivo
+              </label>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button 
+                onClick={handleBulkUpload}
+                disabled={!bulkFile || bulkLoading}
+                className="flex-1 bg-primary hover:bg-primary-dark text-white font-bold py-3 rounded-xl disabled:bg-slate-400 shadow-lg shadow-primary/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                {bulkLoading ? "Procesando..." : "🚀 Iniciar Carga Masiva"}
+              </button>
+              <a 
+                href="/templates/providers_template.csv" 
+                download 
+                className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-6 py-3 rounded-xl text-sm font-bold hover:bg-slate-200 text-center transition-colors cursor-pointer"
+              >
+                📥 Descargar Plantilla
+              </a>
+            </div>
+
+            {bulkResults && (
+              <div className="mt-4 p-4 bg-slate-100 dark:bg-slate-800 rounded-xl space-y-2">
+                <p className="text-sm font-bold text-foreground">Resultados:</p>
+                <p className="text-sm text-emerald-600 dark:text-emerald-400 font-medium">✅ {bulkResults.success} proveedores creados correctamente.</p>
+                {bulkResults.errors.length > 0 && (
+                  <div className="mt-2">
+                    <p className="text-sm text-red-500 font-bold">Errores ({bulkResults.errors.length}):</p>
+                    <ul className="text-xs text-red-400 list-disc list-inside mt-1 max-h-32 overflow-y-auto">
+                      {bulkResults.errors.map((e, i) => <li key={i}>{e}</li>)}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </main>
